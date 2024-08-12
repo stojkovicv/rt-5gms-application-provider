@@ -7,17 +7,38 @@ program. If this file is missing then the license can be retrieved from
 https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 */
 
-// Auxiliary function to clear storage when the connection is lost
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadAllSessions();
+});
 
 let operatingUrl = '';
+let isConnectionLost = false;
 
-let isStorageCleared = false;
-function clearStorage() {
-  localStorage.clear();
-  let session_table = document.getElementById('session_table');
-  for (let i = session_table.rows.length - 1; i > 0; i--) {
-    session_table.deleteRow(i);
-  }
+function checkAFstatus() {
+  fetch(`${operatingUrl}connection_checker`)
+    .then(response => {
+      if (!response.ok && !isConnectionLost) {
+        document.getElementById('AFStatus').innerText = 'Connection with Application Function: ❌';
+        clearTable();
+        removeAllSessionsFromWebServer();
+        showConnectionLostAlert();
+        isConnectionLost = true;
+      } else if (response.ok) {
+        document.getElementById('AFStatus').innerText = 'Connection with Application Function: ✅';
+        isConnectionLost = false;
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      if (!isConnectionLost) {
+        document.getElementById('AFStatus').innerText = 'Connection with AF interrupted.';
+        clearTable();
+        removeAllSessionsFromWebServer();
+        showConnectionLostAlert();
+        isConnectionLost = true;
+      }
+    });
 }
 
 function showConnectionLostAlert() {
@@ -29,154 +50,161 @@ function showConnectionLostAlert() {
   });
 }
 
-function checkAFstatus() {
-  fetch(`${operatingUrl}connection_checker`)
-  .then(response => {
-    if (!response.ok && !isStorageCleared) {
-      document.getElementById('AFStatus').innerText = 'Connection with Application Function: ❌';
-      clearStorage();
-      showConnectionLostAlert();
-      isStorageCleared = true;
-    } else if (response.ok) {
-      document.getElementById('AFStatus').innerText = 'Connection with Application Function: ✅';
-      isStorageCleared = false;}
-  })
-  .catch(error => {
-    console.error('Error:', error);
-    if (!isStorageCleared) {
-      document.getElementById('AFStatus').innerText = 'Connection with AF interrupted.';
-      clearStorage();
-      showConnectionLostAlert();
-      isStorageCleared = true;}
-  });
-}
-
-function do_on_policy_templates_check(session_id, fn) {
+function policyTemplateOptionsCheck(session_id, fn) {
   fetch(`${operatingUrl}policy_template_checker/${session_id}`).then(response => (response.ok && response.json()['enabled']), response => false).then(fn);
 }
 
-function addSessionToTable(sessionId) {
-  const sessionData = JSON.parse(localStorage.getItem(sessionId));
-  const session_table = document.getElementById('session_table');
-  let row = session_table.insertRow(-1);
 
-  let cell1 = row.insertCell(0); // Session ID
-  let cell2 = row.insertCell(1); // Create CHC from JSON
-  let cell3 = row.insertCell(2); // Create and show certificate
-  let cell4 = row.insertCell(3); // Show Protocols button
+function clearTable() {
+
+  const m1Table = document.getElementById('m1_table');
+  while (m1Table.rows.length > 1) {
+    m1Table.deleteRow(1);
+  }
+}
+
+function removeAllSessionsFromWebServer() {
+  fetch(`${operatingUrl}remove_all_sessions`, {
+    method: 'DELETE'
+  })
+  .then(response => {
+    if (!response.ok) {
+      console.error('Failed to purge all sessions from the backend server.');
+    }
+  })
+  .catch(error => {
+    console.error('Error clearing sessions from the backend server:', error);
+  });
+}
+
+function addSessionToTable(sessionId) {
+  const m1Table = document.getElementById('m1_table');
+  let row = m1Table.insertRow(-1);
+
+  let cell1 = row.insertCell(0); // Provisioning Session ID
+  let cell2 = row.insertCell(1); // Content Hosting Configuration
+  let cell3 = row.insertCell(2); // Certification (Create, Show)
+  let cell4 = row.insertCell(3); // Show Protocols
   let cell5 = row.insertCell(4); // Consumption Reporting (Set, Show, Delete)
   let cell6 = row.insertCell(5); // Dynamic Policies
-  let cell7 = row.insertCell(6); // Show Session Details
-  let cell8 = row.insertCell(7); // Metrics Reporting Configuration
+  let cell7 = row.insertCell(6); // Metrics Reporting Configuration
+  let cell8 = row.insertCell(7); // Session Details
   let cell9 = row.insertCell(8); // Delete session
-
+  
   cell1.innerHTML = sessionId;
+
   cell2.innerHTML = `<button onclick="createChcFromJson('${sessionId}')" class="btn btn-primary table-button">Create</button>`;
+
   cell3.innerHTML = `<button onclick="createNewCertificate('${sessionId}')" class="btn btn-primary table-button">Create</button>
-                      <button onclick="showCertificateDetails('${sessionId}', '${sessionData.certificate_id}')" class="btn btn-info table-button">Show</button>`
-  cell4.innerHTML = `<button onclick="getProtocols('${sessionId}')" class="btn btn-info table-button">Show</button>`;
+                     <button onclick="showCertificateDetails('${sessionId}')" class="btn btn-secondary table-button">Show</button>`;
+  
+  cell4.innerHTML = `<button onclick="showProtocols('${sessionId}')" class="btn btn-secondary table-button">Show</button>`;
+
   cell5.innerHTML = `<button onclick="setConsumptionReporting('${sessionId}')" class="btn btn-primary table-button">Set</button>
-                      <button onclick="showConsumptionReporting('${sessionId}')" class="btn btn-info table-button">Show</button>
+                      <button onclick="showConsumptionReporting('${sessionId}')" class="btn btn-secondary table-button">Show</button>
                       <button onclick="deleteConsumptionReporting('${sessionId}')" class="btn btn-danger table-button">Delete</button>`;
-  cell6.innerHTML = `<button onclick="setDynamicPolicy('${sessionId}')" class="loading btn btn-primary table-button" disabled="disabled">Set</button>
-                     <button onclick="showDynamicPolicies('${sessionId}', '${sessionData.policy_template_id}')" class="loading btn btn-info table-button" disabled="disabled">Show</button>
-                     <button onclick="deleteDynamicPolicy('${sessionId}', '${sessionData.policy_template_id}')" class="loading btn btn-danger table-button" disabled="disabled">Delete</button>
-                     <p><img src="static/images/loading.gif" alt="loading..." /> Checking feature availability...</p>`;
-  do_on_policy_templates_check(sessionId, enabled => {
-    buttons = cell6.getElementsByTagName('button');
-    for (but of buttons) {
-      but.classList.remove('loading');
-      but.disabled = !enabled;
-      if (!enabled) {
-          but.classList.add('disabled');
+
+                      cell6.innerHTML = `
+                      <p class="policy-message"><img src="static/images/loading.gif" alt="loading..." /> Checking feature availability...</p>
+                      <a href="#" onclick="setDynamicPolicy('${sessionId}')" class="dynamic-policy-link font-medium text-blue-600 dark:text-blue-500 hover:underline disabled-link">Set</a><br>
+                      <a href="#" onclick="showDynamicPolicies('${sessionId}')" class="dynamic-policy-link font-medium text-green-600 dark:text-green-500 hover:underline ml-4 disabled-link">Show</a><br>
+                      <a href="#" onclick="deleteDynamicPolicy('${sessionId}')" class="dynamic-policy-link font-medium text-red-600 dark:text-red-500 hover:underline ml-4 disabled-link">Delete</a>
+                    `;
+                    
+                    policyTemplateOptionsCheck(sessionId, enabled => {
+                      const links = cell6.getElementsByClassName('dynamic-policy-link');
+                      for (let link of links) {
+                        link.classList.remove('disabled-link');
+                        if (!enabled) {
+                          link.classList.add('disabled-link');
+                          link.style.pointerEvents = 'none';
+                          link.style.color = 'white'; 
+                        } else {
+                          link.style.pointerEvents = 'auto';
+                          link.style.color = ''; 
+                        }
+                      }                   
+                      const msg = cell6.getElementsByClassName('policy-message')[0];
+                      msg.style.display = 'none'; 
+                    });
+
+  cell7.innerHTML = `<button onclick="createMetricsJson('${sessionId}')" class="btn btn-primary table-button">Create</button>
+                    <button onclick="showMetricsReporting('${sessionId}')" class="btn btn-secondary table-button">Show</button>
+                    <button onclick="deleteMetricsConfiguration('${sessionId}')" class="btn btn-danger table-button">Delete</button>`;
+                    
+  cell8.innerHTML = `<button onclick="getProvisioningSessionDetails()" class="btn btn-secondary table-button">Details</button>`;
+
+  cell9.innerHTML = `<button onclick="deleteProvisioningSession('${sessionId}')" class="btn btn-danger table-button">Delete</button>`;
+}
+
+async function loadAllSessions() {
+  try {
+      const response = await fetch(`${operatingUrl}fetch_all_sessions`, {
+          method: 'GET',
+          headers: {
+              'Content-Type': 'application/json'
+          }
+      });
+
+      if (!response.ok) {
+          Swal.fire({
+              title: 'Failed to load data!',
+              text: 'Check connection with the 5GMS Application Function.',
+              icon: 'error',
+              confirmButtonText: 'OK'
+          });
+          return;
       }
-    }
-    msg = cell6.getElementsByTagName('p')[0];
-    if (enabled) {
-      msg.innerText='';
-    } else {
-      msg.innerText='Feature not configured';
-    }
-  });
-  cell7.innerHTML = `<button onclick="getProvisioningSessionDetails()" class="btn btn-info table-button">Show</button>`;
-  cell8.innerHTML = `<button onclick="createMetricsJson('${sessionId}')" class="btn btn-primary table-button">Create</button>
-                      <button onclick="showMetricsReporting('${sessionId}')" class="btn btn-info table-button">Show</button>
-                      <button onclick="deleteMetricsConfiguration('${sessionId}')" class="btn btn-danger table-button">Delete</button>`;
-  cell9.innerHTML = `<button onclick="deleteProvisioningSession('${sessionId}')" class="btn btn-danger table-button">Remove</button>`;
-}
 
-async function createNewSession() {
-  const response = await fetch(`${operatingUrl}create_session`, { method: 'POST' });
-  if (!response.ok) {
-    Swal.fire({
-      title: 'Failed to create new session!',
-      text: 'Please, make sure that Application Function is running!',
-      icon: 'error',
-      confirmButtonText: 'OK'
-    });
-    return;}
+      const data = await response.json();
+      const sessionIds = data.session_ids;
 
-  const data = await response.json();
-  Swal.fire({
-    title: 'Created Provisioning Session',
-    text: `ID: ${data.provisioning_session_id}`,
-    icon: 'success',
-    confirmButtonText: 'OK'
-  });
-  localStorage.setItem(data.provisioning_session_id, JSON.stringify({
-    certificate_id: 'not yet created'
-  }));
-  addSessionToTable(data.provisioning_session_id);
-}
+      sessionIds.forEach(sessionId => {
+          addSessionToTable(sessionId);
+      });
 
-function removeSessionFromTableAndStorage(sessionId) {
-  let session_table = document.getElementById('session_table');
-  for (let i = 1; i < session_table.rows.length; i++) {
-    if (session_table.rows[i].cells[0].innerHTML === sessionId) {
-      session_table.deleteRow(i);
-      break;
-    }
-  }
-  localStorage.removeItem(sessionId);
-  localStorage.removeItem(sessionId + "-cert");
-}
-
-async function deleteProvisioningSession(sessionId) {
-  const result = await Swal.fire({
-    title: 'Delete Provisioning Session?',
-    text: "Permanently remove provisioning session?",
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Yes',
-    cancelButtonText: 'No'
-  });
-  if (result.value) {
-    const response = await fetch(`${operatingUrl}delete_session/${sessionId}`, {
-      method: 'DELETE'
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        removeSessionFromTableAndStorage(sessionId);
-      } else {
-        Swal.fire({
-          title: 'Failed to delete the provisioning session.',
-          text: '',
+  } catch (error) {
+      //console.error('Error:', error);
+      Swal.fire({
+          title: 'Error',
+          text: 'An unexpected error occurred while loading the sessions.',
           icon: 'error',
           confirmButtonText: 'OK'
-        });
-      }
+      });
+  }
+};
+
+async function createNewSession(){
+  try {
+    const response = await fetch(`${operatingUrl}create_session`, { method: 'POST' });
+    if (!response.ok) {
+      Swal.fire({
+        title: 'Failed to create new provisioning session!',
+        text: 'Please, make sure that Application Function is running!',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
       return;
     }
+    const data = await response.json();
     Swal.fire({
-      title: `Deleted Provisioning session`,
-      text: `${sessionId} deleted with all resources`,
+      title: 'Created Provisioning Session',
+      text: `ID: ${data.provisioning_session_id}`,
       icon: 'success',
       confirmButtonText: 'OK'
     });
-    removeSessionFromTableAndStorage(sessionId);
+    addSessionToTable(data.provisioning_session_id);
   }
-}
+  catch (error) {
+    console.error('Caught error:', error);
+    Swal.fire({
+      title: 'Network Error',
+      text: 'Failed to communicate with the backend server.',
+      icon: 'error',
+      confirmButtonText: 'OK'
+    });
+  }
+};
 
 async function createChcFromJson(sessionId) {
   const response = await fetch(`${operatingUrl}set_stream/${sessionId}`, {
@@ -203,10 +231,6 @@ async function createChcFromJson(sessionId) {
   });
 }
 
-async function getProvisioningSessionDetails() {
-  window.open(`${operatingUrl}details`, '_blank');
-}
-
 async function createNewCertificate(sessionId) {
   try {
       const response = await fetch(`${operatingUrl}certificate/${sessionId}`, {
@@ -214,30 +238,14 @@ async function createNewCertificate(sessionId) {
       });
       const data = await response.json();
       if (response.ok) {
-
-        // Storing certificate_id to the local storage
-        let session_data = JSON.parse(localStorage.getItem(sessionId)) || {};
-        session_data.certificate_id = data.certificate_id;
-        localStorage.setItem(sessionId, JSON.stringify(session_data));
-
           Swal.fire({
               title: 'Certificate created successfully!',
               text: `ID: ${data.certificate_id}`,
               icon: 'success',
               confirmButtonText: 'OK'
-          }); 
+          });
 
-          let session_table = document.getElementById('session_table');
-
-          for (let i = 1; i < session_table.rows.length; i++) {
-            if (session_table.rows[i].cells[0].innerHTML === sessionId) {
-                let cell = session_table.rows[i].cells[2];
-                cell.innerHTML = `<button onclick="createNewCertificate('${sessionId}')" class="btn btn-primary table-button">Create</button>
-                                  <button onclick="showCertificateDetails('${sessionId}', '${data.certificate_id}')" class="btn btn-info table-button">Show</button>`;
-            }
-        }
-
-      } else {
+        } else {
           Swal.fire({
               title: 'Error',
               text: data.detail || 'An error occurred',
@@ -254,18 +262,44 @@ async function createNewCertificate(sessionId) {
       });
     }
 }
+  
+async function showCertificateDetails(sessionId) {
+  try {
+    const response = await fetch(`${operatingUrl}get_certificate_id/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
-function showCertificateDetails(sessionId) {
-  let session_data = JSON.parse(localStorage.getItem(sessionId));
-  let certificate_id = session_data.certificate_id;
-  window.open(`${operatingUrl}show_certificate/${sessionId}/${certificate_id}`, '_blank');l
+    if (!response.ok) {
+      Swal.fire({
+        title: 'Error',
+        text: 'Certificate might not be activated for this Provisioning Session.',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    const data = await response.json();
+    const certificateId = data.certificate_id;
+
+    window.open(`${operatingUrl}show_certificate/${sessionId}/${certificateId}`, '_blank');
+
+  } catch (error) {
+    Swal.fire({
+      title: 'Network Error',
+      text: 'Failed to communicate with the server.',
+      icon: 'error',
+      confirmButtonText: 'OK'
+    });
+  }
 }
 
-
-function getProtocols(sessionId) {
+function showProtocols(sessionId) {
   window.open(`${operatingUrl}show_protocol/${sessionId}`, '_blank');
 }
-
 
 async function setConsumptionReporting(session_id) {
   const { value: formValues, dismiss } = await Swal.fire({
@@ -445,9 +479,9 @@ async function setDynamicPolicy(sessionId) {
       <input id="state" class="swal2-input" placeholder="State">
       <input id="type" class="swal2-input" placeholder="Type">
     `,
-  customClass:{
-    popup: 'policies-swall'
-  },
+    customClass: {
+      popup: 'policies-swall'
+    },
     focusConfirm: false,
     preConfirm: () => {
       const externalReference = document.getElementById('externalReference').value;
@@ -519,6 +553,7 @@ async function setDynamicPolicy(sessionId) {
     },
     showCancelButton: true,
   });
+
   if (formValues) {
     try {
       const response = await fetch(`${operatingUrl}create_policy_template/${sessionId}`, {
@@ -534,7 +569,6 @@ async function setDynamicPolicy(sessionId) {
         return;
       }
       const data = await response.json();
-      localStorage.setItem(`policyTemplateId_${sessionId}`, data.policy_template_id);
       Swal.fire('Success', `Created Dynamic Policies with ID: "${data.policy_template_id}"`, 'success');
     } catch (error) {
       console.error('Error:', error);
@@ -544,74 +578,88 @@ async function setDynamicPolicy(sessionId) {
 }
 
 async function showDynamicPolicies(sessionId) {
-  const policy_template_id = localStorage.getItem(`policyTemplateId_${sessionId}`);
-  if (policy_template_id && policy_template_id !== 'undefined') {
-      const url = `${operatingUrl}show_policy_template/${sessionId}/${policy_template_id}`;
+  try {
+    const response = await fetch(`${operatingUrl}list_policy_template_ids/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      Swal.fire('Error', 'Failed to retrieve policy templates.', 'error');
+      return;
+    }
+
+    const policyTemplateIds = await response.json();
+
+    if (policyTemplateIds.length > 0) {
+      const policyTemplateId = policyTemplateIds[0];
+      const url = `${operatingUrl}show_policy_template/${sessionId}/${policyTemplateId}`;
       window.open(url, '_blank');
-  } else {
-      Swal.fire({
-        title: 'Error',
-        text: 'Policy template ID not found or not created yet.',
-        icon: 'error'
-      });
+    } else {
+      Swal.fire('Error', 'No policy template IDs found for this session.', 'error');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    Swal.fire('Error', 'An unexpected error occurred while retrieving the policy templates.', 'error');
   }
 }
 
 async function deleteDynamicPolicy(sessionId) {
-  const policyTemplateId = localStorage.getItem(`policyTemplateId_${sessionId}`);
-  if (!policyTemplateId || policyTemplateId === 'undefined') {
-    await Swal.fire({
-      title: 'Error',
-      text: 'Policy template ID not found or not created yet.',
-      icon: 'error',
-      confirmButtonText: 'OK'
-    });
-    return;
-  }
-  const result = await Swal.fire({
-    title: 'Delete Policy Template?',
-    text: `Are you sure you want to delete the policy template with ID: ${policyTemplateId}?`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Yes',
-    cancelButtonText: 'No',
-  });
-  if (result.isConfirmed) {
-    try {
-      const response = await fetch(`${operatingUrl}delete_policy_template/${sessionId}/${policyTemplateId}`, {
-        method: 'DELETE'
-      });
-      if (response.status === 204) {
-        await Swal.fire({
-          title: 'Deleted!',
-          text: `The policy template with ID: ${policyTemplateId} has been deleted.`,
-          icon: 'success',
-          confirmButtonText: 'OK'
-        });
-
-        localStorage.removeItem(`policyTemplateId_${sessionId}`);
-      } else {
-        let data;
-        try {
-          data = await response.json();
-        } catch (error) {
-          data = { detail: "Unknown error occurred." };
-        }
-        await Swal.fire({
-          title: 'Failed to Delete',
-          text: data.detail,
-          icon: 'error',
-          confirmButtonText: 'OK'
-        });
+  try {
+    const response = await fetch(`${operatingUrl}list_policy_template_ids/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
       }
-    } catch (error) {
-      await Swal.fire({
-        title: 'Error',
-        text: 'Network error or server not responding.',
-        icon: 'error',
-        confirmButtonText: 'OK'
-      });
+    });
+
+    if (!response.ok) {
+      Swal.fire('Error', 'Failed to retrieve policy templates.', 'error');
+      return;
     }
+
+    const policyTemplateIds = await response.json();
+    if (policyTemplateIds.length > 0) {
+      const policyTemplateId = policyTemplateIds[0];
+
+      const result = await Swal.fire({
+        title: 'Delete Policy Template?',
+        text: `Are you sure you want to delete the policy template with ID: ${policyTemplateId}?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes',
+        cancelButtonText: 'No',
+      });
+
+      if (result.isConfirmed) {
+        try {
+          const deleteResponse = await fetch(`${operatingUrl}delete_policy_template/${sessionId}/${policyTemplateId}`, {
+            method: 'DELETE'
+          });
+
+          if (deleteResponse.status === 204) {
+            Swal.fire({
+              title: 'Deleted!',
+              text: `The policy template with ID: ${policyTemplateId} has been deleted.`,
+              icon: 'success',
+              confirmButtonText: 'OK'
+            });
+          } else {
+            const data = await deleteResponse.json();
+            Swal.fire('Failed to Delete', data.detail, 'error');
+          }
+        } catch (error) {
+          Swal.fire('Error', 'Network error or server not responding.', 'error');
+        }
+      }
+    } else {
+      Swal.fire('Error', 'No policy template IDs found for this session.', 'error');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    Swal.fire('Error', 'An unexpected error occurred while retrieving the policy templates.', 'error');
   }
 }
 
@@ -797,12 +845,76 @@ async function deleteMetrics(sessionId, metricsId) {
   }
 }
 
-window.onload = function() {
+async function getProvisioningSessionDetails() {
+  window.open(`${operatingUrl}details`, '_blank');
+}
 
-  setInterval(checkAFstatus, 5000);
+async function deleteProvisioningSession(sessionId) {
+  const result = await Swal.fire({
+    title: 'Delete Provisioning Session?',
+    text: "Permanently remove provisioning session and it resources?",
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes',
+    cancelButtonText: 'No'
+  });
   
-  for (let i = 0; i < localStorage.length; i++) {
-    let session_id = localStorage.key(i);
-    addSessionToTable(session_id);
+  if (result.value) {
+    try {
+      const response = await fetch(`${operatingUrl}delete_session/${sessionId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          Swal.fire({
+            title: 'Provisioning session not found.',
+            text: 'The session might have already been deleted.',
+            icon: 'info',
+            confirmButtonText: 'OK'
+          });
+          removeSessionFromTable(sessionId);
+        } else {
+          Swal.fire({
+            title: 'Failed to delete the provisioning session.',
+            text: '',
+            icon: 'error',
+            confirmButtonText: 'OK'
+          });
+        }
+        return;
+      }
+
+      Swal.fire({
+        title: 'Deleted Provisioning session',
+        text: `${sessionId} deleted with all resources`,
+        icon: 'success',
+        confirmButtonText: 'OK'
+      });
+      
+      removeSessionFromTable(sessionId);
+
+    } catch (error) {
+      Swal.fire({
+        title: 'Error',
+        text: 'An error occurred while deleting the session.',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    }
   }
+}
+
+function removeSessionFromTable(sessionId) {
+  let m1_table = document.getElementById('m1_table');
+  for (let i = 1; i < m1_table.rows.length; i++) {
+    if (m1_table.rows[i].cells[0].innerHTML === sessionId) {
+      m1_table.deleteRow(i);
+      break;
+    }
+  }
+}
+
+window.onload = function() {
+  setInterval(checkAFstatus, 5000);
 }
