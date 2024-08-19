@@ -104,7 +104,7 @@ function addSessionToTable(sessionId) {
                       <button onclick="showConsumptionReporting('${sessionId}')" class="btn btn-secondary table-button">Show</button>
                       <button onclick="deleteConsumptionReporting('${sessionId}')" class="btn btn-danger table-button">Delete</button>`;
 
-                      cell6.innerHTML = `
+  cell6.innerHTML = `
                       <p class="policy-message"><img src="static/images/loading.gif" alt="loading..." /> Checking feature availability...</p>
                       <a href="#" onclick="setDynamicPolicy('${sessionId}')" class="dynamic-policy-link font-medium text-blue-600 dark:text-blue-500 hover:underline disabled-link">Set</a><br>
                       <a href="#" onclick="showDynamicPolicies('${sessionId}')" class="dynamic-policy-link font-medium text-green-600 dark:text-green-500 hover:underline ml-4 disabled-link">Show</a><br>
