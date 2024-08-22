@@ -115,8 +115,15 @@ Description: This endpoint will remove all provisioning sessions from the memory
 @app.delete("/remove_all_sessions")
 async def remove_all_sessions():    
     session = await get_session(config)
-    session._M1Session__provisioning_sessions.clear()
-    return {"message": "All sessions removed from the memory."}
+    session_ids = await session.provisioningSessionIds()
+
+    for session_id in session_ids:
+        result = await session.provisioningSessionDestroy(session_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Provisioning Session {session_id} not found")
+        if not result:
+            raise HTTPException(status_code=500, detail=f"Failed to remove session {session_id}")
+    return {"message": "All provisioning sessions were destroyed"}
 
 
 """
@@ -173,8 +180,6 @@ HTTP Method: GET
 Path: /details
 Description: This endpoint will return all details for all active provisioning sessions
 """
-
-# Auxiliary function to get details for a particular provisioning session in async manner
 async def get_session_details(session, ps_id):
     details = {"Certificates": {}}
     certs = await session.certificateIds(ps_id)
@@ -227,7 +232,6 @@ async def new_certificate(provisioning_session_id: str, csr: bool = Query(False)
     config = Configuration()
     session = await get_session(config)
     cert_id = None
-
     try:
         if csr:
             result = await session.certificateNewSigningRequest(provisioning_session_id, extra_domain_names=extra_domain_names)
@@ -239,31 +243,23 @@ async def new_certificate(provisioning_session_id: str, csr: bool = Query(False)
             cert_id = await session.createNewCertificate(provisioning_session_id, extra_domain_names=extra_domain_names)
             if cert_id is None:
                 raise HTTPException(status_code=400, detail='Failed to create certificate')
-            
-        session_data = session._M1Session__provisioning_sessions.get(provisioning_session_id)
-        if session_data is not None:
-            session_data['certificate_id'] = cert_id
-
         return {"certificate_id": cert_id}
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-"""
-Endpoint: Get certificate ID for the provisioning session
-HTTP Method: GET
-Path: /get_certificate_id/{provisioning_session_id}
-Description: This endpoint will return the certificate ID for a particular provisioning session.
-"""    
-@app.get("/get_certificate_id/{provisioning_session_id}")
-async def get_certificate_id(provisioning_session_id: str):
-    session = await get_session(config)
-    session_data = session._M1Session__provisioning_sessions.get(provisioning_session_id)
-    if session_data and 'certificate_id' in session_data:
-        return {"certificate_id": session_data['certificate_id']}
-    else:
-        raise HTTPException(status_code=404, detail="Certificate ID not found for the given session.")
 
+@app.get("/list_certificate_ids/{provisioning_session_id}")
+async def list_certificate_ids(provisioning_session_id: str):
+    config = Configuration()
+    session = await get_session(config)
+    try:
+        cert_ids = await session.certificateIds(provisioning_session_id)
+        if cert_ids is None:
+            raise HTTPException(status_code=404, detail="No certificates found for the provided provisioning session ID")
+        return {"certificate_ids": cert_ids}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 """
 Endpoint: Show certificate for provisioning session
@@ -272,17 +268,12 @@ Path: /show_certificate/{provisioning_session_id}/{certificate_id}
 Description: This endpoint will show a certificate for a particular provisioning session.
 """
 @app.get("/show_certificate/{provisioning_session_id}/{certificate_id}")
-async def show_certificate(provisioning_session_id: str, certificate_id: str, raw: Optional[bool] = False):
+async def show_certificate(provisioning_session_id: str, certificate_id: str):
     session = await get_session(config)
-    cert_data = await session.certificateGet(provisioning_session_id, certificate_id)
-
-    if cert_data is None:
-        raise HTTPException(status_code=404, detail=f"Certificate might not be activated for the provisioning session: {provisioning_session_id}")
-
-    if raw:
-        return {"raw_data": cert_data}
-
-    return {"certificate_details": cert_data}
+    cert = await session.certificateGet(provisioning_session_id, certificate_id)
+    if cert is None:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+    return cert
 
 """
 Endpoint: Show protocol for provisioning session

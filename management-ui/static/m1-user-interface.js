@@ -265,7 +265,7 @@ async function createNewCertificate(sessionId) {
   
 async function showCertificateDetails(sessionId) {
   try {
-    const response = await fetch(`${operatingUrl}get_certificate_id/${sessionId}`, {
+    const response = await fetch(`${operatingUrl}list_certificate_ids/${sessionId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -283,8 +283,19 @@ async function showCertificateDetails(sessionId) {
     }
 
     const data = await response.json();
-    const certificateId = data.certificate_id;
+    const certificateIds = data.certificate_ids;
 
+    if (!certificateIds || certificateIds.length === 0) {
+      Swal.fire({
+        title: 'No Certificates for session',
+        text: 'No certificates found for this Provisioning Session.',
+        icon: 'info',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }    
+
+    const certificateId = certificateIds[0];
     window.open(`${operatingUrl}show_certificate/${sessionId}/${certificateId}`, '_blank');
 
   } catch (error) {
@@ -296,6 +307,7 @@ async function showCertificateDetails(sessionId) {
     });
   }
 }
+
 
 function showProtocols(sessionId) {
   window.open(`${operatingUrl}show_protocol/${sessionId}`, '_blank');
