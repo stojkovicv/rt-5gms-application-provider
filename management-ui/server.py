@@ -95,10 +95,42 @@ async def new_provisioning_session(app_id: Optional[str] = None, asp_id: Optiona
     return {"provisioning_session_id": provisioning_session_id}
 
 """
+Endpoint: Fetch all provisioning sessions
+HTTP Method: GET
+Path: /fetch_all_sessions
+Description: This endpoint will a list of all provisioning sessions.
+"""
+@app.get("/fetch_all_sessions")
+async def get_all_sessions():
+    session = await get_session(config)
+    session_ids = await session.provisioningSessionIds() 
+    return {"session_ids": list(session_ids)}
+
+"""
+Endpoint: Remove all provisioning sessions
+HTTP Method: DELETE
+Path: /remove_all_sessions
+Description: This endpoint will remove all provisioning sessions from the memory.
+"""
+@app.delete("/remove_all_sessions")
+async def remove_all_sessions():    
+    session = await get_session(config)
+    session_ids = await session.provisioningSessionIds()
+
+    for session_id in session_ids:
+        result = await session.provisioningSessionDestroy(session_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Provisioning Session {session_id} not found")
+        if not result:
+            raise HTTPException(status_code=500, detail=f"Failed to remove session {session_id}")
+    return {"message": "All provisioning sessions were destroyed"}
+
+
+"""
 Endpoint: Delete Provisioning Session
 HTTP Method: DELETE
 Path: /delete_session/{provisioning_session_id}
-Description: This endpoint will remove a provisioning session with all its resources.
+Description: This endpoint will delete a particular provisioning session with all its resources.
 """
 @app.delete("/delete_session/{provisioning_session_id}")
 async def cmd_delete_session(provisioning_session_id: str, config: Configuration = Depends(get_config)):
@@ -148,8 +180,6 @@ HTTP Method: GET
 Path: /details
 Description: This endpoint will return all details for all active provisioning sessions
 """
-
-# Auxiliary function to get details for a particular provisioning session in async manner
 async def get_session_details(session, ps_id):
     details = {"Certificates": {}}
     certs = await session.certificateIds(ps_id)
@@ -200,24 +230,34 @@ Description: This endpoint will set a certificate for a particular provisioning 
 @app.post("/certificate/{provisioning_session_id}")
 async def new_certificate(provisioning_session_id: str, csr: bool = Query(False), extra_domain_names: str = Query(None)):
     config = Configuration()
+    session = await get_session(config)
+    cert_id = None
     try:
-        session = await get_session(config)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    if csr:
-        try:
+        if csr:
             result = await session.certificateNewSigningRequest(provisioning_session_id, extra_domain_names=extra_domain_names)
             if result is None:
                 raise HTTPException(status_code=400, detail='Failed to reserve certificate')
             cert_id, csr_data = result
             return {"certificate_id": cert_id, "csr": csr_data}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    try:
-        cert_id = await session.createNewCertificate(provisioning_session_id, extra_domain_names=extra_domain_names)
-        if cert_id is None:
-            raise HTTPException(status_code=400, detail='Failed to create certificate')
+        else:
+            cert_id = await session.createNewCertificate(provisioning_session_id, extra_domain_names=extra_domain_names)
+            if cert_id is None:
+                raise HTTPException(status_code=400, detail='Failed to create certificate')
         return {"certificate_id": cert_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/list_certificate_ids/{provisioning_session_id}")
+async def list_certificate_ids(provisioning_session_id: str):
+    config = Configuration()
+    session = await get_session(config)
+    try:
+        cert_ids = await session.certificateIds(provisioning_session_id)
+        if cert_ids is None:
+            raise HTTPException(status_code=404, detail="No certificates found for the provided provisioning session ID")
+        return {"certificate_ids": cert_ids}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -228,18 +268,12 @@ Path: /show_certificate/{provisioning_session_id}/{certificate_id}
 Description: This endpoint will show a certificate for a particular provisioning session.
 """
 @app.get("/show_certificate/{provisioning_session_id}/{certificate_id}")
-async def show_certificate(provisioning_session_id: str, certificate_id: str, raw: Optional[bool] = False):
-
+async def show_certificate(provisioning_session_id: str, certificate_id: str):
     session = await get_session(config)
-    cert_data = await session.certificateGet(provisioning_session_id, certificate_id)
-
-    if cert_data is None:
-        raise HTTPException(status_code=404, detail=f"Unable to get certificate {certificate_id} for provisioning session {provisioning_session_id}")
-
-    if raw:
-        return {"raw_data": cert_data}
-
-    return {"certificate_details": cert_data}
+    cert = await session.certificateGet(provisioning_session_id, certificate_id)
+    if cert is None:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+    return cert
 
 """
 Endpoint: Show protocol for provisioning session
@@ -341,6 +375,31 @@ async def create_policy_template(provisioning_session_id: str, request: Request)
         return {"policy_template_id": policy_template_id}
     else:
         raise HTTPException(status_code=400, detail="Addition of PolicyTemplate to provisioning session failed!")
+    
+"""
+Endpoint: Retrieve list policy template IDs for provisioning session
+HTTP Method: GET
+Path: /list_policy_template_ids/{provisioning_session_id}
+Description: This endpoint will retrieve a list of policy template IDs for a particular provisioning session.
+"""
+@app.get("/list_policy_template_ids/{provisioning_session_id}")
+async def list_policy_template_ids(provisioning_session_id: str):
+    provisionig_session_url = f"{OPTIONS_ENDPOINT}/{provisioning_session_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(provisionig_session_url)
+            response.raise_for_status() 
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Error when listing policy template IDs: {str(e)}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail="Connection error to M1 interface")
+
+    all_data = response.json()
+    policy_template_ids = all_data.get("policyTemplateIds")
+    if not policy_template_ids:
+        raise HTTPException(status_code=404, detail="No PolicyTemplate found")
+
+    return policy_template_ids    
 
     
 """
