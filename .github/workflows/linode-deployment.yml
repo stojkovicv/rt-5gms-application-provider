@@ -1,56 +1,59 @@
-name: Deployment of the FastAPI server to Linode instance with proxying for production and staging
+name: linode-deployment
 
 on:
-  push:
-    branches:
-      - master
-      - development
+    workflow_call:
+        inputs:
+            envname:
+                required: true
+                type: string
+            web_server_path:
+                required: true
+                type: string
+            port:
+                required: true
+                type: string
+        secrets:
+            host:
+                required: true
+            user:
+                required: true
+            private_key:
+                required: true
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    deploy:
+        runs-on: ubuntu-latest
 
-    steps:
-    - name: Checkout code changes
-      uses: actions/checkout@v2
+        steps:
+            - name: Set up SSH connection
+              uses: webfactory/ssh-agent@v0.5.3
+              with:
+                ssh-private-key: ${{secrets.private_key}}
 
-    - name: Set up SSH connection
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.LINODE_SSH_KEY }}
+            - name: List added SSH keys (for debugging)
+              run: ssh-add -l
 
-    - name: List added SSH keys (for debugging)
-      run: ssh-add -l
+            - name: Deploy to Linode instance
+              env:
+                LINODE_IP: ${{secrets.host}}
+                USER: ${{secrets.user}}
+                WEB_SERVER_PATH: ${{inputs.web_server_path}}
+                ENV_NAME: ${{inputs.envname}}
+                PORT: ${{inputs.port}}
+              run: |
+                echo "Starting deployment for ${ENV_NAME} environment on the port ${PORT}"
 
-    - name: Deploy to Linode instance
-      env:
-        SERVER_IP: ${{ secrets.LINODE_SERVER_IP }}
-        USER: ${{ secrets.LINODE_USER }}
-      run: |
-        echo "Starting Linode deployment"
+                ssh -v -o StrictHostKeyChecking=no $USER@$LINODE_IP << 'EOF'
+                  set -e
+                  echo "Connected to Linode server"
+                  echo "Deploying for ${ENV_NAME} branch"
+                  cd $WEB_SERVER_PATH
+                  git pull origin ${ENV_NAME} || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
+                  echo "Successfully updated ${ENV_NAME} code"
+                  pkill -f "uvicorn.*${PORT}" || echo "No process to kill on port ${PORT}"
+                  echo "Clearing port ${PORT}"
+                  nohup uvicorn server:app --host 127.0.0.1 --port ${PORT} > ${WEB_SERVER_PATH}/nohup.out 2>&1 &
+                  echo "Activated FastAPI server for ${ENV_NAME} environment on port ${PORT}"
 
-        ssh -v -o StrictHostKeyChecking=no $USER@$SERVER_IP << 'EOF'
-          set -e
-          echo "Connected to Linode server"
-
-          echo "Deploying for production (master)"
-          cd ~/webui-production/management-ui
-          git pull origin master || { echo 'Git pull for production failed'; exit 1; }
-          echo "Successfully updated master code"
-          pkill -f "uvicorn.*8000" || echo "No process to kill on port 8000"
-          echo "Clearing port 8000"
-          nohup uvicorn server:app --host 127.0.0.1 --port 8000 > ~/webui-production/management-ui/nohup.out 2>&1 &
-          echo "Started updated FastAPI server for production"
-
-          echo "Deploying for staging (development)"
-          cd ~/webui-staging/management-ui
-          git pull origin development || { echo 'Git pull for staging failed'; exit 1; }
-          echo "Successfully updated development code"
-          pkill -f "uvicorn.*8001" || echo "No process to kill on port 8001"
-          echo "Clearing port 8001"
-          nohup uvicorn server:app --host 127.0.0.1 --port 8001 > ~/webui-staging/management-ui/nohup.out 2>&1 &
-          echo "Started updated FastAPI server for staging"
-
-          echo "Deployment completed."
-
-        EOF
+                  echo "Deployment completed."
+                EOF
