@@ -3,21 +3,21 @@ name: linode-deployment
 on:
     workflow_call:
         inputs:
-            envname:
+            ENV_NAME:
                 required: true
                 type: string
-            web_server_path:
+            WEB_SERVER_PATH:
                 required: true
                 type: string
-            port:
+            PORT:
                 required: true
                 type: string
         secrets:
-            host:
+            LINODE_IP:
                 required: true
-            user:
+            USER:
                 required: true
-            private_key:
+            PRIVATE_KEY:
                 required: true
 
 jobs:
@@ -28,20 +28,20 @@ jobs:
             - name: Set up SSH connection
               uses: webfactory/ssh-agent@v0.5.3
               with:
-                ssh-private-key: ${{secrets.private_key}}
+                ssh-private-key: ${{secrets.PRIVATE_KEY}}
 
             - name: List added SSH keys (for debugging)
               run: ssh-add -l
 
             - name: Deploy to Linode instance
               env:
-                LINODE_IP: ${{secrets.host}}
-                USER: ${{secrets.user}}
-                WEB_SERVER_PATH: ${{inputs.web_server_path}}
-                ENV_NAME: ${{inputs.envname}}
-                PORT: ${{inputs.port}}
+                LINODE_IP: ${{secrets.LINODE_IP}}
+                USER: ${{secrets.USER}}
+                WEB_SERVER_PATH: ${{inputs.WEB_SERVER_PATH}}
+                ENV_NAME: ${{inputs.ENV_NAME}}
+                PORT: ${{inputs.PORT}}
               run: |
-                echo "Starting deployment for ${ENV_NAME} environment on the port ${PORT}"
+                echo "Starting deployment for ${ENV_NAME} environment on port ${PORT}"
 
                 ssh -v -o StrictHostKeyChecking=no $USER@$LINODE_IP << 'EOF'
                   set -e
