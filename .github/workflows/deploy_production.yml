@@ -1,4 +1,4 @@
-name: deploy_master
+name: deploy_production
 
 on:
     push:
@@ -10,7 +10,7 @@ jobs:
         uses: ./.github/workflows/linode-deployment.yml
         with:
             envname: master
-            deploy_path: '~/webui-production/management-ui'
+            web_server_path: '~/webui-production/management-ui'
             port: '8000'
         secrets:
             host: ${{ secrets.LINODE_IP }}
