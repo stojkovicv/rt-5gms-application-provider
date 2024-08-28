@@ -9,10 +9,10 @@ jobs:
     deploy_production:
         uses: ./.github/workflows/linode-deployment.yml
         with:
-            envname: master
-            web_server_path: '~/webui-production/management-ui'
-            port: '8000'
+            ENV_NAME: master
+            WEB_SERVER_PATH: '~/webui-production/management-ui'
+            PORT: '8000'
         secrets:
-            host: ${{ secrets.LINODE_IP }}
-            user: ${{ secrets.USER }}
-            private_key: ${{ secrets.PRIVATE_KEY }}
+            LINODE_IP: ${{ secrets.LINODE_IP }}
+            USER: ${{ secrets.USER }}
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}

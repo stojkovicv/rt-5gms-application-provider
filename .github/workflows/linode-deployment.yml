@@ -47,11 +47,14 @@ jobs:
                   set -e
                   echo "Connected to Linode server"
                   echo "Deploying for ${ENV_NAME} branch"
+
                   cd $WEB_SERVER_PATH
                   git pull origin ${ENV_NAME} || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
                   echo "Successfully updated ${ENV_NAME} code"
+
                   pkill -f "uvicorn.*${PORT}" || echo "No process to kill on port ${PORT}"
                   echo "Clearing port ${PORT}"
+                  
                   nohup uvicorn server:app --host 127.0.0.1 --port ${PORT} > ${WEB_SERVER_PATH}/nohup.out 2>&1 &
                   echo "Activated FastAPI server for ${ENV_NAME} environment on port ${PORT}"
 

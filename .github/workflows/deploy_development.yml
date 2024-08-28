@@ -9,10 +9,10 @@ jobs:
     deploy_staging:
         uses: ./.github/workflows/linode-deployment.yml
         with:
-            envname: development
-            deploy_path: '~/webui-staging/management-ui'
-            port: '8001'
+            ENV_NAME: development
+            WEB_SERVER_PATH: '~/webui-staging/management-ui'
+            PORT: '8001'
         secrets:
-            host: ${{ secrets.LINODE_IP }}
-            user: ${{ secrets.USER }}
-            private_key: ${{ secrets.PRIVATE_KEY }}
+            LINODE_IP: ${{ secrets.LINODE_IP }}
+            USER: ${{ secrets.USER }}
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
