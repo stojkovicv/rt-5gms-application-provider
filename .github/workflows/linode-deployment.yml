@@ -43,13 +43,17 @@ jobs:
               run: |
                 echo "Starting deployment for ${ENV_NAME} environment on port ${PORT}"
 
-                ssh -v -o StrictHostKeyChecking=no $USER@$LINODE_IP << 'EOF'
+                ssh -v -o StrictHostKeyChecking=no $USER@$LINODE_IP << EOF
                   set -e
                   echo "Connected to Linode server"
                   echo "Deploying for ${ENV_NAME} branch"
 
                   cd $WEB_SERVER_PATH
-                  git pull origin ${ENV_NAME} || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
+                  if [ ! -d ".git" ]; then
+                    echo "Error: .git directory not found in $WEB_SERVER_PATH"
+                    exit 1
+                  fi
+                  git pull origin $ENV_NAME || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
                   echo "Successfully updated ${ENV_NAME} code"
 
                   pkill -f "uvicorn.*${PORT}" || echo "No process to kill on port ${PORT}"
