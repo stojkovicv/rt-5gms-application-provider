@@ -55,7 +55,8 @@ jobs:
                   fi
                   git pull origin $ENV_NAME || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
                   echo "Successfully updated ${ENV_NAME} code"
-
+                  echo "Accessing management-ui directory"
+                  cd $WEB_SERVER_PATH/management-ui
                   pkill -f "uvicorn.*${PORT}" || echo "No process to kill on port ${PORT}"
                   echo "Clearing port ${PORT}"
                   

@@ -10,7 +10,7 @@ jobs:
         uses: ./.github/workflows/linode-deployment.yml
         with:
             ENV_NAME: development
-            WEB_SERVER_PATH: '~/webui-staging/management-ui'
+            WEB_SERVER_PATH: '~/webui-staging/'
             PORT: '8001'
         secrets:
             LINODE_IP: ${{ secrets.LINODE_IP }}
